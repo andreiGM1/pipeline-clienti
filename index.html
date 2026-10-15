@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Client Pipeline CRM — Sincronizare Notion, Follow-up WhatsApp & Generator Proforme</title>
+  <meta name="description" content="Dashboard CRM pentru gestionarea clienților de site-uri web, urmărirea ofertelor, remindere automate de follow-up la 3 zile și generare de devize proforme PDF.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <!-- jsPDF CDN for Proforma Invoicing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <!-- Header -->
+  <header class="crm-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-badge">⚡ CRM v2.0</div>
+        <div>
+          <h1 class="brand-title">Pipeline <span>Clienți Web Dev</span></h1>
+          <p class="brand-subtitle">Gestionare proiecte active: Bogdan, Marius & Mara, Miruna, Edi & Simina, Eden</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="sync-status-indicator" id="syncStatusBadge" title="Status conexiune cu baza de date Notion">
+          <span class="status-pulse"></span>
+          <span id="syncStatusText">Notion: Sincronizat</span>
+        </div>
+        <button class="btn btn-secondary" id="btnSyncNotion">🔄 Sincronizează Notion</button>
+        <button class="btn btn-primary" id="btnOpenAddClient">+ Client Nou</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Controls & Search Bar -->
+  <section class="crm-controls-bar">
+    <div class="controls-container">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Caută după nume client, tip proiect sau tehnologie...">
+      </div>
+      <div class="filter-actions">
+        <button class="filter-chip active" data-filter="all">Toate (<span id="countAll">5</span>)</button>
+        <button class="filter-chip alert-chip" data-filter="needs-followup">⚠️ Necesită Follow-up (<span id="countFollowup">0</span>)</button>
+        <button class="filter-chip" data-filter="active">În Desfășurare (<span id="countActive">4</span>)</button>
+        <button class="filter-chip" data-filter="finalizat">Încasat (<span id="countDone">1</span>)</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Metrics Bar -->
+  <section class="metrics-bar">
+    <div class="metrics-container">
+      <div class="metric-card">
+        <span class="metric-label">Valoare Totală Pipeline</span>
+        <strong class="metric-value" id="valPipeline">6.950 RON</strong>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Proiecte În Ofertare / Contact</span>
+        <strong class="metric-value" id="countNegotiation">3 Proiecte</strong>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">În Dezvoltare Activă</span>
+        <strong class="metric-value" id="countDevelopment">1 Proiect</strong>
+      </div>
+      <div class="metric-card highlight">
+        <span class="metric-label">Încasări / Gata de Livrare</span>
+        <strong class="metric-value" id="valWon">1.950 RON</strong>
+      </div>
+    </div>
+  </section>
+
+  <!-- Kanban Board -->
+  <main class="kanban-section">
+    <div class="kanban-board">
+      <!-- Col 1: Lead / Discuție -->
+      <div class="kanban-col" data-status="lead">
+        <div class="col-header">
+          <div class="col-title-wrap">
+            <span class="col-dot dot-yellow"></span>
+            <h3>1. Contact & Lead</h3>
+          </div>
+          <span class="col-badge" id="badge-lead">1</span>
+        </div>
+        <div class="card-list" id="col-lead"></div>
+      </div>
+
+      <!-- Col 2: Ofertat / Propunere -->
+      <div class="kanban-col" data-status="ofertat">
+        <div class="col-header">
+          <div class="col-title-wrap">
+            <span class="col-dot dot-cyan"></span>
+            <h3>2. Ofertă Trimisă</h3>
+          </div>
+          <span class="col-badge" id="badge-ofertat">2</span>
+        </div>
+        <div class="card-list" id="col-ofertat"></div>
+      </div>
+
+      <!-- Col 3: În Dezvoltare -->
+      <div class="kanban-col" data-status="lucru">
+        <div class="col-header">
+          <div class="col-title-wrap">
+            <span class="col-dot dot-purple"></span>
+            <h3>3. În Lucru / Prototip</h3>
+          </div>
+          <span class="col-badge" id="badge-lucru">1</span>
+        </div>
+        <div class="card-list" id="col-lucru"></div>
+      </div>
+
+      <!-- Col 4: Livrat & Încasat -->
+      <div class="kanban-col" data-status="finalizat">
+        <div class="col-header">
+          <div class="col-title-wrap">
+            <span class="col-dot dot-green"></span>
+            <h3>4. Livrat & Încasat</h3>
+          </div>
+          <span class="col-badge" id="badge-finalizat">1</span>
+        </div>
+        <div class="card-list" id="col-finalizat"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Add Client Modal -->
+  <div class="modal-backdrop" id="addClientModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Adaugă Proiect / Client Nou în Pipeline</h3>
+        <button class="btn-close" id="btnCloseAddModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="newClientForm">
+          <div class="form-group">
+            <label for="clientName">Nume Client</label>
+            <input type="text" id="clientName" placeholder="Ex: Alexandru B." required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="projectType">Tip Proiect</label>
+              <input type="text" id="projectType" placeholder="Ex: Landing Page Prezentare" required>
+            </div>
+            <div class="form-group">
+              <label for="projectValue">Valoare Estimată (RON)</label>
+              <input type="number" id="projectValue" placeholder="1500" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="clientPhone">Număr Telefon WhatsApp</label>
+              <input type="tel" id="clientPhone" placeholder="07xx xxx xxx" value="0722123456" required>
+            </div>
+            <div class="form-group">
+              <label for="projectStatus">Etapă Inițială</label>
+              <select id="projectStatus">
+                <option value="lead">Contact & Lead</option>
+                <option value="ofertat">Ofertă Trimisă</option>
+                <option value="lucru">În Lucru</option>
+                <option value="finalizat">Livrat & Încasat</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="lastContactDate">Dată Ultimul Contact</label>
+            <input type="date" id="lastContactDate" required>
+          </div>
+          <div class="form-group">
+            <label for="projectScript">Script Negociere / Mesaj WhatsApp</label>
+            <textarea id="projectScript" rows="3" placeholder="Mesajul pregătit pentru trimis..."></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">Salvează în Pipeline</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Proforma Invoice Generator Modal -->
+  <div class="modal-backdrop" id="proformaModal">
+    <div class="modal-dialog modal-dialog-wide">
+      <div class="modal-header">
+        <div>
+          <span class="section-label-tag">GENERATOR DEVIZ PROFORMĂ PDF</span>
+          <h3 id="proformaModalTitle">Deviz Proformă Oficial — Andrei.Dev</h3>
+        </div>
+        <button class="btn-close" id="btnCloseProformaModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="proforma-grid">
+          <!-- Editor Controls -->
+          <div class="proforma-edit-col">
+            <h4 style="font-size: 1.05rem; margin-bottom: 0.75rem; color: var(--accent-cyan);">1. Date Facturare & Client</h4>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Beneficiar</label>
+                <input type="text" id="profClientName" readonly>
+              </div>
+              <div class="form-group">
+                <label>Serie & Număr Deviz</label>
+                <input type="text" id="profNumber" readonly>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Dată Emitere</label>
+                <input type="date" id="profIssueDate">
+              </div>
+              <div class="form-group">
+                <label>Termen Valabilitate</label>
+                <select id="profValidityDays">
+                  <option value="14">14 Zile lucrătoare</option>
+                  <option value="30" selected>30 Zile calendaristice</option>
+                </select>
+              </div>
+            </div>
+
+            <h4 style="font-size: 1.05rem; margin: 1.25rem 0 0.75rem; color: var(--accent-cyan);">2. Defalcare Servicii Digitale</h4>
+            <div class="services-list-editor" id="servicesListEditor">
+              <!-- Dynamically populated rows -->
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" id="btnAddServiceRow" style="margin-top: 0.5rem;">+ Adaugă Linie Serviciu</button>
+
+            <div class="proforma-conditions-box">
+              <strong>Condiții Financiare:</strong> 50% avans la demararea proiectului, 50% la recepție și lansare live pe domeniul final. Cod IBAN comunicat pe document.
+            </div>
+          </div>
+
+          <!-- Live Preview & Action Column -->
+          <div class="proforma-preview-col">
+            <h4 style="font-size: 1.05rem; margin-bottom: 0.75rem; color: var(--accent-emerald);">3. Sumar Calculat & Export</h4>
+            <div class="preview-receipt-card">
+              <div class="receipt-header">
+                <strong>Andrei.Dev — Web Architecture</strong>
+                <span id="previewProfCode">PF-2026-0001</span>
+              </div>
+              <div class="receipt-row">
+                <span>Client:</span>
+                <strong id="previewClient">Bogdan</strong>
+              </div>
+              <div class="receipt-row">
+                <span>Proiect:</span>
+                <span id="previewProject">Site Bază de Contacte</span>
+              </div>
+              <hr class="receipt-divider">
+              <div id="previewItemsSummary"></div>
+              <hr class="receipt-divider">
+              <div class="receipt-row receipt-total">
+                <span>TOTAL DE PLATĂ:</span>
+                <strong id="previewGrandTotal">0 RON</strong>
+              </div>
+              <div class="receipt-row" style="font-size: 0.8rem; color: var(--accent-cyan);">
+                <span>Avans 50%:</span>
+                <strong id="previewAdvance">0 RON</strong>
+              </div>
+            </div>
+
+            <div class="proforma-action-btns">
+              <button class="btn btn-primary btn-block" id="btnDownloadProformaPdf" style="padding: 0.9rem; font-weight: 700;">
+                📥 Descarcă Deviz Proformă PDF
+              </button>
+              <button class="btn btn-outline btn-block" id="btnSendProformaWhatsApp">
+                📲 Trimite Notificare & Link WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notion Sync Modal -->
+  <div class="modal-backdrop" id="notionSyncModal">
+    <div class="modal-dialog modal-dialog-wide">
+      <div class="modal-header">
+        <div>
+          <span class="section-label-tag">INTEGRARE NOTION MCP</span>
+          <h3>Sincronizare Automată Pipeline Clienți</h3>
+        </div>
+        <button class="btn-close" id="btnCloseNotionModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+          Baza de date Notion (ID: <code>3f127fe7-c32b-8045-9ea8-c88d1049242f</code>) este sincronizată în timp real cu CRM-ul local. Modificările de etapă, reminderele și valorile de contract se propagă automat.
+        </p>
+        <div class="notion-table-preview" id="notionTablePreview">
+          <!-- Injected dynamically -->
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 1.5rem;">
+          <button class="btn btn-secondary" id="btnCopyNotionJson">📋 Copiază Payload JSON</button>
+          <button class="btn btn-primary" id="btnTriggerNotionSync">⚡ Execută Sincronizare Acum</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toastMsg"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
